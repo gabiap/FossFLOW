@@ -1,6 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import {
+  Button,
+  Heading,
+  Text,
+  Flash,
+  Spinner,
+  Label,
+  TextInput,
+  FormControl,
+  IconButton
+} from '@primer/react';
+import { XIcon, CloudIcon, CheckCircleIcon, TrashIcon, LinkIcon } from '@primer/octicons-react';
 import { storageManager, DiagramInfo } from '../services/storageService';
-import './DiagramManager.css';
 
 interface Props {
   onLoadDiagram: (id: string, data: any) => void;
@@ -189,124 +200,149 @@ export const DiagramManager: React.FC<Props> = ({
   };
 
   return (
-    <div className="diagram-manager-overlay">
-      <div className="diagram-manager">
-        <div className="diagram-manager-header">
-          <h2>Diagram Manager</h2>
-          <button className="close-button" onClick={onClose}>
-            ×
-          </button>
+    <div className="fossflow-modal-overlay">
+      <div className="fossflow-modal" style={{ width: '90%', maxWidth: '800px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+        {/* Header */}
+        <div className="fossflow-modal-header">
+          <Heading as="h2" sx={{ fontSize: 2, fontWeight: 'semibold' }}>Diagram Manager</Heading>
+          <IconButton icon={XIcon} aria-label="Close" variant="invisible" onClick={onClose} />
         </div>
 
-        <div className="storage-info">
-          <span
-            className={`storage-badge ${isServerStorage ? 'server' : 'local'}`}
-          >
+        {/* Storage badge */}
+        <div
+          style={{
+            padding: '8px 16px',
+            borderBottom: '1px solid var(--borderColor-default, #d1d9e0)',
+            display: 'flex', alignItems: 'center', gap: '12px',
+            backgroundColor: 'var(--bgColor-muted, #f6f8fa)'
+          }}
+        >
+          <Label variant={isServerStorage ? 'accent' : 'attention'}>
             {isServerStorage ? '🌐 Server Storage' : '💾 Local Storage'}
-          </span>
+          </Label>
           {isServerStorage && (
-            <span className="storage-note">
+            <Text sx={{ fontSize: 1, color: 'fg.muted' }}>
               Diagrams are saved on the server and available across all devices
-            </span>
+            </Text>
           )}
         </div>
 
-        {error && <div className="error-message">{error}</div>}
+        {error && (
+          <div style={{ padding: '0 16px', marginTop: '12px' }}>
+            <Flash variant="danger">{error}</Flash>
+          </div>
+        )}
 
-        <div className="diagram-manager-actions">
-          <button
-            className="action-button primary"
+        {/* Save action */}
+        <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--borderColor-default, #d1d9e0)' }}>
+          <Button
+            variant="primary"
+            size="small"
+            leadingVisual={CheckCircleIcon}
             onClick={() => {
               setSaveName(currentDiagramData?.name || 'Untitled Diagram');
               setShowSaveDialog(true);
             }}
           >
-            💾 Save Current Diagram
-          </button>
+            Save Current Diagram
+          </Button>
         </div>
 
-        {loading ? (
-          <div className="loading">Loading diagrams...</div>
-        ) : (
-          <div className="diagram-list">
-            {diagrams.length === 0 ? (
-              <div className="empty-state">
-                <p>No saved diagrams</p>
-                <p className="hint">Save your current diagram to get started</p>
-              </div>
-            ) : (
-              diagrams.map((diagram) => {
-                return (
-                  <div key={diagram.id} className="diagram-item">
-                    <div className="diagram-info">
-                      <h3>{diagram.name}</h3>
-                      <span className="diagram-meta">
-                        Last modified: {diagram.lastModified.toLocaleString()}
-                        {diagram.size &&
-                          ` • ${(diagram.size / 1024).toFixed(1)} KB`}
-                      </span>
-                    </div>
-                    <div className="diagram-actions">
-                      <button
-                        className="action-button"
-                        onClick={() => {
-                          return handleLoad(diagram.id);
-                        }}
-                        disabled={loading}
-                      >
-                        {loading ? 'Loading...' : 'Load'}
-                      </button>
-                      <button
-                        className="action-button share"
-                        onClick={() => {
-                          return handleCopyShareLink(diagram.id);
-                        }}
-                        title="Copy shareable link"
-                      >
-                        Share
-                      </button>
-                      <button
-                        className="action-button danger"
-                        onClick={() => {
-                          return handleDelete(diagram.id);
-                        }}
-                        disabled={loading}
-                      >
-                        Delete
-                      </button>
-                    </div>
+        {/* Diagram list */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '16px' }}>
+          {loading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+              <Spinner size="medium" />
+            </div>
+          ) : diagrams.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <CloudIcon size={32} />
+              <Text sx={{ display: 'block', mt: 2, color: 'fg.muted' }}>No saved diagrams</Text>
+              <Text sx={{ display: 'block', fontSize: 1, color: 'fg.muted', mt: 1 }}>
+                Save your current diagram to get started
+              </Text>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {diagrams.map((diagram) => (
+                <div
+                  key={diagram.id}
+                  className="fossflow-diagram-item"
+                >
+                  <div>
+                    <Text sx={{ fontWeight: 'semibold', display: 'block' }}>{diagram.name}</Text>
+                    <Text sx={{ fontSize: 0, color: 'fg.muted' }}>
+                      Last modified: {diagram.lastModified.toLocaleString()}
+                      {diagram.size && ` • ${(diagram.size / 1024).toFixed(1)} KB`}
+                    </Text>
                   </div>
-                );
-              })
-            )}
-          </div>
-        )}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <Button
+                      size="small"
+                      variant="primary"
+                      onClick={() => handleLoad(diagram.id)}
+                      disabled={loading}
+                    >
+                      Load
+                    </Button>
+                    <Button
+                      size="small"
+                      leadingVisual={LinkIcon}
+                      onClick={() => handleCopyShareLink(diagram.id)}
+                    >
+                      Share
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="danger"
+                      leadingVisual={TrashIcon}
+                      onClick={() => handleDelete(diagram.id)}
+                      disabled={loading}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
-        {/* Save Dialog */}
+        {/* Save Dialog (nested overlay) */}
         {showSaveDialog && (
-          <div className="save-dialog">
-            <h3>Save Diagram</h3>
-            <input
-              type="text"
-              placeholder="Diagram name"
-              value={saveName}
-              onChange={(e) => {
-                return setSaveName(e.target.value);
+          <div
+            style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: '6px'
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: 'var(--bgColor-default, #ffffff)',
+                borderRadius: '6px',
+                border: '1px solid var(--borderColor-default, #d1d9e0)',
+                boxShadow: '0 8px 24px rgba(140,149,159,0.2)',
+                width: '340px', padding: '16px'
               }}
-              onKeyDown={(e) => {
-                return e.key === 'Enter' && handleSave();
-              }}
-              autoFocus
-            />
-            <div className="dialog-buttons">
-              <button onClick={handleSave}>Save</button>
-              <button
-                onClick={() => {
-                  return setShowSaveDialog(false);
-                }}
-              >
-                Cancel
-              </button>
+            >
+              <Heading as="h3" sx={{ fontSize: 2, mb: 3 }}>Save Diagram</Heading>
+              <FormControl>
+                <FormControl.Label>Diagram name</FormControl.Label>
+                <TextInput
+                  block
+                  placeholder="Diagram name"
+                  value={saveName}
+                  onChange={(e) => setSaveName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+                  autoFocus
+                />
+              </FormControl>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
+                <Button onClick={() => setShowSaveDialog(false)}>Cancel</Button>
+                <Button variant="primary" onClick={handleSave}>Save</Button>
+              </div>
             </div>
           </div>
         )}

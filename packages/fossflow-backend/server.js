@@ -4,6 +4,10 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import {
+  BedrockRuntimeClient,
+  InvokeModelCommand
+} from '@aws-sdk/client-bedrock-runtime';
 
 // Load environment variables
 dotenv.config();
@@ -235,6 +239,107 @@ if (STORAGE_ENABLED) {
     res.status(503).json({ error: 'Server storage is disabled' });
   });
 }
+
+// ─── Amazon Bedrock / Claude AI Endpoint ────────────────────────────────────
+// Accepts caller-supplied credentials so the server doesn't need its own keys.
+// Credentials are validated and forwarded to AWS; they are never persisted.
+app.post('/api/bedrock/generate', async (req, res) => {
+  const { prompt, currentDiagram, credentials } = req.body;
+
+  if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+    return res.status(400).json({ error: 'prompt is required' });
+  }
+
+  const { accessKeyId, secretAccessKey, region, modelId } = credentials || {};
+  if (!accessKeyId || !secretAccessKey || !region || !modelId) {
+    return res.status(400).json({
+      error: 'AWS credentials (accessKeyId, secretAccessKey, region, modelId) are required'
+    });
+  }
+
+  try {
+    const client = new BedrockRuntimeClient({
+      region,
+      credentials: { accessKeyId, secretAccessKey }
+    });
+
+    const systemPrompt = `You are a diagram generation assistant for FossFLOW, an isometric network/infrastructure diagram editor.
+Your job is to produce valid JSON that describes diagram items for the Isoflow diagram format.
+
+The output must be a valid JSON object with this structure:
+{
+  "items": [
+    {
+      "id": "<unique-string>",
+      "type": "NODE",
+      "label": "<display label>",
+      "position": { "x": <number>, "y": <number> }
+    }
+  ],
+  "connectors": [
+    {
+      "id": "<unique-string>",
+      "from": "<item-id>",
+      "to": "<item-id>",
+      "label": "<optional label>"
+    }
+  ]
+}
+
+Rules:
+- Use type "NODE" for all diagram items
+- Position values should be integers between 0 and 20, spaced 3-4 units apart
+- Use short, clear labels (max 3 words)
+- Return ONLY the JSON object, no markdown, no explanation
+- If the user mentions updating/modifying the current diagram, incorporate the existing items and add/modify as instructed`;
+
+    const userMessage = currentDiagram?.items?.length
+      ? `Current diagram has ${currentDiagram.items.length} items. ${prompt}`
+      : prompt;
+
+    const payload = {
+      anthropic_version: 'bedrock-2023-05-31',
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }]
+    };
+
+    const command = new InvokeModelCommand({
+      modelId,
+      contentType: 'application/json',
+      accept: 'application/json',
+      body: JSON.stringify(payload)
+    });
+
+    const response = await client.send(command);
+    const responseText = new TextDecoder().decode(response.body);
+    const responseData = JSON.parse(responseText);
+
+    const content = responseData.content?.[0]?.text || '';
+
+    // Extract JSON from the response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return res.status(500).json({ error: 'AI did not return valid diagram JSON', raw: content });
+    }
+
+    const diagramData = JSON.parse(jsonMatch[0]);
+
+    // Merge with current diagram if provided
+    if (currentDiagram && currentDiagram.items?.length) {
+      const existingIds = new Set((currentDiagram.items || []).map((i) => i.id));
+      const newItems = (diagramData.items || []).filter((i) => !existingIds.has(i.id));
+      diagramData.items = [...(currentDiagram.items || []), ...newItems];
+    }
+
+    res.json(diagramData);
+  } catch (error) {
+    console.error('Bedrock error:', error);
+    const message = error?.message || 'Failed to call Amazon Bedrock';
+    // Mask credential-related details from client
+    res.status(500).json({ error: message.includes('credentials') ? 'Invalid AWS credentials' : message });
+  }
+});
 
 // Start server
 app.listen(PORT, () => {

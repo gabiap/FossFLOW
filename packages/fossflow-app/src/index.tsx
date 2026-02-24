@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { ThemeProvider, BaseStyles } from '@primer/react';
 import './index.css';
 import 'react-quill-new/dist/quill.snow.css';
 import App from './App';
@@ -15,11 +16,15 @@ const root = ReactDOM.createRoot(
 );
 root.render(
   <React.StrictMode>
-    <I18nextProvider i18n={i18n}>
-        <ErrorBoundary FallbackComponent={ErrorBoundaryFallbackUI}>
+    <ThemeProvider colorMode="day">
+      <BaseStyles>
+        <I18nextProvider i18n={i18n}>
+          <ErrorBoundary FallbackComponent={ErrorBoundaryFallbackUI}>
             <App />
-        </ErrorBoundary>
-    </I18nextProvider>
+          </ErrorBoundary>
+        </I18nextProvider>
+      </BaseStyles>
+    </ThemeProvider>
   </React.StrictMode>
 );
 
