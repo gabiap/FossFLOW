@@ -39,8 +39,8 @@ export function ChatPanel({ diagramData, onDiagramUpdate, isReadonly }: ChatPane
 
   // Check if backend AI is available
   useEffect(() => {
-    fetch(`${BACKEND_URL}/api/storage/status`, { signal: AbortSignal.timeout(3000) })
-      .then(() => setIsOnline(true))
+    fetch(`${BACKEND_URL}/api/ai/status`, { signal: AbortSignal.timeout(3000) })
+      .then((r) => r.ok && setIsOnline(true))
       .catch(() => setIsOnline(false));
   }, []);
 

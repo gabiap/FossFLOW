@@ -40,6 +40,15 @@ app.get('/api/storage/status', (req, res) => {
   });
 });
 
+// AI health check endpoint
+app.get('/api/ai/status', (req, res) => {
+  res.json({
+    available: true,
+    model: BEDROCK_MODEL_ID,
+    region: AWS_REGION
+  });
+});
+
 // AI Chat endpoint - streaming SSE with Claude via Bedrock
 app.post('/api/ai/chat', async (req, res) => {
   const { messages, diagramData } = req.body;
