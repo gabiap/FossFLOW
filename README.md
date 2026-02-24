@@ -134,6 +134,44 @@ npm run publish:lib  # Publish library to npm
 - **Export/Import**: Permanent storage as JSON files
 - **Auto-Save**: Automatically saves changes every 5 seconds to session
 
+## 🤖 AI Diagram Generation (Amazon Bedrock)
+
+FossFLOW supports generating and modifying diagrams using natural language via **Amazon Bedrock** (Claude AI).
+
+### Prerequisites
+
+1. An AWS account with access to Amazon Bedrock
+2. Enable the Claude model of your choice in the [AWS Bedrock console](https://console.aws.amazon.com/bedrock)
+3. AWS credentials (Access Key ID + Secret Access Key) with `bedrock:InvokeModel` permission
+
+### Setup
+
+Click the **Bedrock** button in the toolbar to open the settings panel, then enter:
+- **AWS Access Key ID** – your 20-character AWS access key
+- **AWS Secret Access Key** – your 40+ character AWS secret key
+- **AWS Region** – the region where Bedrock is enabled (e.g., `us-east-1`)
+- **Claude Model** – the Bedrock model ID (Claude 3.5 Sonnet recommended)
+
+Credentials are stored **only in your browser's local storage** and are never persisted on the server.
+
+### Environment Variables (Optional)
+
+You can also configure Bedrock via environment variables for server-side use. Copy `.env.example` to `.env` and fill in the Bedrock section:
+
+```env
+AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+AWS_REGION=us-east-1
+BEDROCK_MODEL_ID=anthropic.claude-3-5-sonnet-20241022-v2:0
+```
+
+### Generating Diagrams
+
+Click **AI Generate** in the toolbar, describe your diagram in plain English, and click **Generate Diagram**. Examples:
+- *"Create a 3-tier web architecture with load balancer, web servers, and database"*
+- *"Show a CI/CD pipeline from developer laptop to production"*
+- *"Design a microservices architecture with an API gateway"*
+
 ## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Isoflow } from 'fossflow';
 import { flattenCollections } from '@isoflow/isopacks/dist/utils';
 import isoflowIsopack from '@isoflow/isopacks/dist/isoflow';
@@ -10,10 +10,30 @@ import {
 } from './diagramUtils';
 import { StorageManager } from './StorageManager';
 import { DiagramManager } from './components/DiagramManager';
+import { BedrockSettings } from './components/BedrockSettings';
+import { AiGenerateDialog } from './components/AiGenerateDialog';
 import { storageManager } from './services/storageService';
 import ChangeLanguage from './components/ChangeLanguage';
 import { allLocales } from 'fossflow';
 import { useIconPackManager, IconPackName } from './services/iconPackManager';
+import {
+  Button,
+  Text,
+  Flash,
+  TextInput,
+  FormControl,
+  Heading,
+  Label
+} from '@primer/react';
+import {
+  FileIcon,
+  DownloadIcon,
+  UploadIcon,
+  DatabaseIcon,
+  EyeIcon,
+  CopilotIcon,
+  KeyIcon
+} from '@primer/octicons-react';
 import './App.css';
 import { BrowserRouter, Route, Routes, useParams } from 'react-router-dom';
 
@@ -65,6 +85,9 @@ function EditorPage() {
   const [showStorageManager, setShowStorageManager] = useState(false);
   const [showDiagramManager, setShowDiagramManager] = useState(false);
   const [serverStorageAvailable, setServerStorageAvailable] = useState(false);
+  const [showBedrockSettings, setShowBedrockSettings] = useState(false);
+  const [showAiGenerate, setShowAiGenerate] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const isReadonlyUrl =
     window.location.pathname.startsWith('/display/') && readonlyDiagramId;
 
@@ -485,6 +508,32 @@ function EditorPage() {
     setHasUnsavedChanges(false); // Mark as saved after export
   };
 
+  const importDiagram = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const parsed = JSON.parse(content);
+        const importedData = parsed.data || parsed;
+        const mergedData = mergeDiagramData(diagramData, importedData);
+        setDiagramData(mergedData);
+        setCurrentModel(mergedData);
+        setDiagramName(parsed.name || importedData.title || '');
+        setHasUnsavedChanges(true);
+        setFossflowKey((k) => k + 1);
+      } catch (err) {
+        console.error('Failed to import diagram:', err);
+        alert('Failed to import diagram. Please check the file format.');
+      }
+    };
+    reader.readAsText(file);
+    // Reset input so the same file can be re-imported
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleDiagramManagerLoad = async (id: string, data: any) => {
     console.log(`App: handleDiagramManagerLoad called for diagram ${id}`);
 
@@ -693,102 +742,129 @@ function EditorPage() {
 
   return (
     <div className="App">
-      <div className="toolbar">
+      <header className="fossflow-header">
+        {/* FossFLOW brand */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: '8px' }}>
+          <Text sx={{ fontWeight: 'bold', fontSize: 2, color: 'accent.fg' }}>
+            FossFLOW
+          </Text>
+        </div>
+
         {!isReadonlyUrl && (
           <>
-            <button onClick={newDiagram}>{t('nav.newDiagram')}</button>
+            <Button size="small" leadingVisual={FileIcon} onClick={newDiagram}>
+              {t('nav.newDiagram')}
+            </Button>
+
             {serverStorageAvailable && (
-              <button
-                onClick={() => {
-                  return setShowDiagramManager(true);
-                }}
-                style={{ backgroundColor: '#2196F3', color: 'white' }}
+              <Button
+                size="small"
+                leadingVisual={DatabaseIcon}
+                variant="primary"
+                onClick={() => setShowDiagramManager(true)}
               >
-                🌐 {t('nav.serverStorage')}
-              </button>
+                {t('nav.serverStorage')}
+              </Button>
             )}
-            <button
-              onClick={() => {
-                return setShowSaveDialog(true);
-              }}
-            >
+
+            <Button size="small" onClick={() => setShowSaveDialog(true)}>
               {t('nav.saveSessionOnly')}
-            </button>
-            <button
-              onClick={() => {
-                return setShowLoadDialog(true);
-              }}
-            >
+            </Button>
+
+            <Button size="small" onClick={() => setShowLoadDialog(true)}>
               {t('nav.loadSessionOnly')}
-            </button>
-            <button
-              onClick={() => {
-                return setShowExportDialog(true);
-              }}
-              style={{ backgroundColor: '#007bff' }}
+            </Button>
+
+            <Button
+              size="small"
+              leadingVisual={DownloadIcon}
+              onClick={() => setShowExportDialog(true)}
             >
-              💾 {t('nav.exportFile')}
-            </button>
-            <button
+              {t('nav.exportFile')}
+            </Button>
+
+            <Button
+              size="small"
+              leadingVisual={UploadIcon}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {t('nav.importFile')}
+            </Button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              style={{ display: 'none' }}
+              onChange={importDiagram}
+            />
+
+            <Button
+              size="small"
               onClick={() => {
                 if (currentDiagram && hasUnsavedChanges) {
                   saveDiagram();
                 }
               }}
               disabled={!currentDiagram || !hasUnsavedChanges}
-              style={{
-                backgroundColor:
-                  currentDiagram && hasUnsavedChanges ? '#ffc107' : '#6c757d',
-                opacity: currentDiagram && hasUnsavedChanges ? 1 : 0.5,
-                cursor:
-                  currentDiagram && hasUnsavedChanges
-                    ? 'pointer'
-                    : 'not-allowed'
-              }}
-              title="Save to current session only"
             >
               {t('nav.quickSaveSession')}
-            </button>
+            </Button>
+
+            {/* AI & Settings section */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '4px' }}>
+              <Button
+                size="small"
+                leadingVisual={CopilotIcon}
+                variant="invisible"
+                onClick={() => setShowAiGenerate(true)}
+                title="Generate diagram with Claude AI via Amazon Bedrock"
+              >
+                AI Generate
+              </Button>
+              <Button
+                size="small"
+                leadingVisual={KeyIcon}
+                variant="invisible"
+                onClick={() => setShowBedrockSettings(true)}
+                title="Amazon Bedrock API settings"
+              >
+                Bedrock
+              </Button>
+            </div>
           </>
         )}
+
         {isReadonlyUrl && (
-          <div
-            style={{
-              color: 'black',
-              padding: '8px 16px',
-              borderRadius: '4px',
-              fontWeight: 'bold',
-              border: '2px solid #000000'
-            }}
-          >
+          <Label variant="attention" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <EyeIcon size={14} />
             {t('dialog.readOnly.mode')}
-          </div>
+          </Label>
         )}
-        <ChangeLanguage />
-        <span className="current-diagram">
+
+        {/* Spacer */}
+        <div style={{ flexGrow: 1 }} />
+
+        {/* Diagram info */}
+        <Text sx={{ fontSize: 1, color: 'fg.muted' }}>
           {isReadonlyUrl ? (
-            <span>
-              {t('status.current')}: {diagramName}
-            </span>
+            `${t('status.current')}: ${diagramName}`
           ) : (
             <>
               {currentDiagram
                 ? `${t('status.current')}: ${currentDiagram.name}`
                 : diagramName || t('status.untitled')}
               {hasUnsavedChanges && (
-                <span style={{ color: '#ff9800', marginLeft: '10px' }}>
+                <Text as="span" sx={{ color: 'attention.fg', marginLeft: '8px' }}>
                   • {t('status.modified')}
-                </span>
+                </Text>
               )}
-              <span
-                style={{ fontSize: '12px', color: '#666', marginLeft: '10px' }}
-              >
-                ({t('status.sessionStorageNote')})
-              </span>
             </>
           )}
-        </span>
-      </div>
+        </Text>
+
+        <ChangeLanguage />
+      </header>
 
       <div className="fossflow-container">
         <Isoflow
@@ -811,48 +887,32 @@ function EditorPage() {
 
       {/* Save Dialog */}
       {showSaveDialog && (
-        <div className="dialog-overlay">
-          <div className="dialog">
-            <h2>{t('dialog.save.title')}</h2>
-            <div
-              style={{
-                backgroundColor: '#fff3cd',
-                border: '1px solid #ffeeba',
-                padding: '15px',
-                borderRadius: '4px',
-                marginBottom: '20px'
-              }}
-            >
-              <strong>⚠️ {t('dialog.save.warningTitle')}:</strong>{' '}
-              {t('dialog.save.warningMessage')}
-              <br />
-              <span
-                dangerouslySetInnerHTML={{
-                  __html: t('dialog.save.warningExport')
-                }}
-              />
+        <div className="fossflow-modal-overlay">
+          <div className="fossflow-modal" style={{ width: '480px' }}>
+            <div className="fossflow-modal-header">
+              <Heading as="h2" sx={{ fontSize: 2 }}>{t('dialog.save.title')}</Heading>
             </div>
-            <input
-              type="text"
-              placeholder={t('dialog.save.placeholder')}
-              value={diagramName}
-              onChange={(e) => {
-                return setDiagramName(e.target.value);
-              }}
-              onKeyDown={(e) => {
-                return e.key === 'Enter' && saveDiagram();
-              }}
-              autoFocus
-            />
-            <div className="dialog-buttons">
-              <button onClick={saveDiagram}>{t('dialog.save.btnSave')}</button>
-              <button
-                onClick={() => {
-                  return setShowSaveDialog(false);
-                }}
-              >
-                {t('dialog.save.btnCancel')}
-              </button>
+            <div className="fossflow-modal-body">
+              <Flash variant="warning" sx={{ mb: 3, fontSize: 1 }}>
+                <Text sx={{ fontWeight: 'semibold' }}>⚠️ {t('dialog.save.warningTitle')}:</Text>{' '}
+                {t('dialog.save.warningMessage')}
+              </Flash>
+              <FormControl>
+                <FormControl.Label>{t('dialog.save.placeholder')}</FormControl.Label>
+                <TextInput
+                  block
+                  placeholder={t('dialog.save.placeholder')}
+                  value={diagramName}
+                  onChange={(e) => setDiagramName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && saveDiagram()}
+                  autoFocus
+                />
+              </FormControl>
+            </div>
+            <div className="fossflow-modal-footer">
+              <div style={{ flexGrow: 1 }} />
+              <Button onClick={() => setShowSaveDialog(false)}>{t('dialog.save.btnCancel')}</Button>
+              <Button variant="primary" onClick={saveDiagram}>{t('dialog.save.btnSave')}</Button>
             </div>
           </div>
         </div>
@@ -860,65 +920,44 @@ function EditorPage() {
 
       {/* Load Dialog */}
       {showLoadDialog && (
-        <div className="dialog-overlay">
-          <div className="dialog">
-            <h2>{t('dialog.load.title')}</h2>
-            <div
-              style={{
-                backgroundColor: '#fff3cd',
-                border: '1px solid #ffeeba',
-                padding: '15px',
-                borderRadius: '4px',
-                marginBottom: '20px'
-              }}
-            >
-              <strong>⚠️ {t('dialog.load.noteTitle')}:</strong>{' '}
-              {t('dialog.load.noteMessage')}
+        <div className="fossflow-modal-overlay">
+          <div className="fossflow-modal" style={{ width: '540px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="fossflow-modal-header">
+              <Heading as="h2" sx={{ fontSize: 2 }}>{t('dialog.load.title')}</Heading>
             </div>
-            <div className="diagram-list">
+            <div className="fossflow-modal-body" style={{ flex: 1, overflow: 'auto' }}>
+              <Flash variant="warning" sx={{ mb: 3, fontSize: 1 }}>
+                <Text sx={{ fontWeight: 'semibold' }}>⚠️ {t('dialog.load.noteTitle')}:</Text>{' '}
+                {t('dialog.load.noteMessage')}
+              </Flash>
               {diagrams.length === 0 ? (
-                <p>{t('dialog.load.noSavedDiagrams')}</p>
+                <Text sx={{ color: 'fg.muted' }}>{t('dialog.load.noSavedDiagrams')}</Text>
               ) : (
-                diagrams.map((diagram) => {
-                  return (
-                    <div key={diagram.id} className="diagram-item">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {diagrams.map((diagram) => (
+                    <div key={diagram.id} className="fossflow-diagram-item">
                       <div>
-                        <strong>{diagram.name}</strong>
-                        <br />
-                        <small>
-                          {t('dialog.load.updated')}:{' '}
-                          {new Date(diagram.updatedAt).toLocaleString()}
-                        </small>
+                        <Text sx={{ fontWeight: 'semibold', display: 'block' }}>{diagram.name}</Text>
+                        <Text sx={{ fontSize: 0, color: 'fg.muted' }}>
+                          {t('dialog.load.updated')}: {new Date(diagram.updatedAt).toLocaleString()}
+                        </Text>
                       </div>
-                      <div className="diagram-actions">
-                        <button
-                          onClick={() => {
-                            return loadDiagram(diagram, false);
-                          }}
-                        >
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <Button size="small" variant="primary" onClick={() => loadDiagram(diagram, false)}>
                           {t('dialog.load.btnLoad')}
-                        </button>
-                        <button
-                          onClick={() => {
-                            return deleteDiagram(diagram.id);
-                          }}
-                        >
+                        </Button>
+                        <Button size="small" variant="danger" onClick={() => deleteDiagram(diagram.id)}>
                           {t('dialog.load.btnDelete')}
-                        </button>
+                        </Button>
                       </div>
                     </div>
-                  );
-                })
+                  ))}
+                </div>
               )}
             </div>
-            <div className="dialog-buttons">
-              <button
-                onClick={() => {
-                  return setShowLoadDialog(false);
-                }}
-              >
-                {t('dialog.load.btnClose')}
-              </button>
+            <div className="fossflow-modal-footer">
+              <div style={{ flexGrow: 1 }} />
+              <Button onClick={() => setShowLoadDialog(false)}>{t('dialog.load.btnClose')}</Button>
             </div>
           </div>
         </div>
@@ -926,37 +965,24 @@ function EditorPage() {
 
       {/* Export Dialog */}
       {showExportDialog && (
-        <div className="dialog-overlay">
-          <div className="dialog">
-            <h2>{t('dialog.export.title')}</h2>
-            <div
-              style={{
-                backgroundColor: '#d4edda',
-                border: '1px solid #c3e6cb',
-                padding: '15px',
-                borderRadius: '8px',
-                marginBottom: '20px'
-              }}
-            >
-              <p style={{ margin: '0 0 10px 0' }}>
-                <strong>✅ {t('dialog.export.recommendedTitle')}:</strong>{' '}
-                {t('dialog.export.recommendedMessage')}
-              </p>
-              <p style={{ margin: 0, fontSize: '14px', color: '#155724' }}>
-                {t('dialog.export.noteMessage')}
-              </p>
+        <div className="fossflow-modal-overlay">
+          <div className="fossflow-modal" style={{ width: '480px' }}>
+            <div className="fossflow-modal-header">
+              <Heading as="h2" sx={{ fontSize: 2 }}>{t('dialog.export.title')}</Heading>
             </div>
-            <div className="dialog-buttons">
-              <button onClick={exportDiagram}>
+            <div className="fossflow-modal-body">
+              <Flash variant="success" sx={{ mb: 3 }}>
+                <Text sx={{ fontWeight: 'semibold' }}>✅ {t('dialog.export.recommendedTitle')}:</Text>{' '}
+                {t('dialog.export.recommendedMessage')}
+              </Flash>
+              <Text sx={{ fontSize: 1, color: 'fg.muted' }}>{t('dialog.export.noteMessage')}</Text>
+            </div>
+            <div className="fossflow-modal-footer">
+              <div style={{ flexGrow: 1 }} />
+              <Button onClick={() => setShowExportDialog(false)}>{t('dialog.export.btnCancel')}</Button>
+              <Button variant="primary" leadingVisual={DownloadIcon} onClick={exportDiagram}>
                 {t('dialog.export.btnDownload')}
-              </button>
-              <button
-                onClick={() => {
-                  return setShowExportDialog(false);
-                }}
-              >
-                {t('dialog.export.btnCancel')}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -965,9 +991,7 @@ function EditorPage() {
       {/* Storage Manager */}
       {showStorageManager && (
         <StorageManager
-          onClose={() => {
-            return setShowStorageManager(false);
-          }}
+          onClose={() => setShowStorageManager(false)}
         />
       )}
 
@@ -977,9 +1001,27 @@ function EditorPage() {
           onLoadDiagram={handleDiagramManagerLoad}
           currentDiagramId={currentDiagram?.id}
           currentDiagramData={currentModel || diagramData}
-          onClose={() => {
-            return setShowDiagramManager(false);
+          onClose={() => setShowDiagramManager(false)}
+        />
+      )}
+
+      {/* Bedrock Settings */}
+      {showBedrockSettings && (
+        <BedrockSettings onClose={() => setShowBedrockSettings(false)} />
+      )}
+
+      {/* AI Generate Dialog */}
+      {showAiGenerate && (
+        <AiGenerateDialog
+          onClose={() => setShowAiGenerate(false)}
+          onDiagramGenerated={(generated) => {
+            const mergedData = mergeDiagramData(diagramData, generated);
+            setDiagramData(mergedData);
+            setCurrentModel(mergedData);
+            setHasUnsavedChanges(true);
+            setFossflowKey((k) => k + 1);
           }}
+          currentDiagramData={currentModel || diagramData}
         />
       )}
     </div>

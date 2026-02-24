@@ -1,4 +1,5 @@
-import './ErrorBoundary.css';
+import { Button, Flash, Heading, Text } from '@primer/react';
+import { AlertIcon, IssueOpenedIcon, SyncIcon } from '@primer/octicons-react';
 
 interface ErrorBoundaryFallbackUIProps {
   error: Error;
@@ -33,30 +34,49 @@ export default function ErrorBoundaryFallbackUI({
   };
 
   return (
-    <div className="error-page-container">
-      <div className="error-container">
-        <div className="error-header">
-          <p>⚠️ Something went wrong!</p>
+    <div
+      style={{
+        width: '100%',
+        height: '100vh',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'var(--bgColor-inset, #f6f8fa)'
+      }}
+    >
+      <div
+        style={{
+          width: '480px',
+          maxWidth: '95vw',
+          backgroundColor: 'var(--bgColor-default, #ffffff)',
+          borderRadius: '6px',
+          border: '1px solid var(--borderColor-default, #d1d9e0)',
+          boxShadow: '0 8px 24px rgba(140,149,159,0.2)',
+          padding: '32px'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+          <AlertIcon size={24} fill="var(--fgColor-danger, #cf222e)" />
+          <Heading as="h2" sx={{ fontSize: 3, color: 'danger.fg' }}>
+            Something went wrong
+          </Heading>
         </div>
-        <div className="error-content">
-          <p>
-            <strong>Error:</strong> {error.message}
-          </p>
+
+        <Flash variant="danger" sx={{ mb: 3 }}>
+          <Text sx={{ fontWeight: 'semibold' }}>Error:</Text> {error.message}
           {error.stack && (
-            <details style={{ marginTop: '10px' }}>
-              <summary
-                style={{ cursor: 'pointer', fontSize: '12px', color: '#666' }}
-              >
+            <details style={{ marginTop: '8px' }}>
+              <summary style={{ cursor: 'pointer', fontSize: '12px', color: 'var(--fgColor-muted, #656d76)' }}>
                 Show technical details
               </summary>
               <pre
                 style={{
                   fontSize: '11px',
-                  color: '#666',
-                  margin: '10px 0 0 0',
+                  color: 'var(--fgColor-muted, #656d76)',
+                  marginTop: '8px',
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
-                  maxHeight: '200px',
+                  maxHeight: '180px',
                   overflow: 'auto'
                 }}
               >
@@ -64,51 +84,36 @@ export default function ErrorBoundaryFallbackUI({
               </pre>
             </details>
           )}
-        </div>
+        </Flash>
 
-        <div
-          style={{
-            backgroundColor: '#d1ecf1',
-            border: '1px solid #bee5eb',
-            borderRadius: '4px',
-            padding: '15px',
-            marginBottom: '20px',
-            fontSize: '14px',
-            color: '#0c5460'
-          }}
-        >
-          <p style={{ margin: '0 0 10px 0', fontWeight: '600' }}>
+        <Flash variant="default" sx={{ mb: 4, fontSize: 1 }}>
+          <Text sx={{ fontWeight: 'semibold', display: 'block', mb: 1 }}>
             📋 Before reporting this error:
-          </p>
-          <ul style={{ margin: '0 0 10px 0', paddingLeft: '20px' }}>
+          </Text>
+          <ul style={{ paddingLeft: '20px', margin: 0 }}>
             <li>
               Check if this error has already been reported{' '}
               <a
                 href="https://github.com/stan-smith/FossFLOW/issues"
-                target="_"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--fgColor-accent, #0969da)' }}
               >
-                here👀
+                here
               </a>
             </li>
             <li>Try refreshing the page first</li>
             <li>Only report if this is a new, unreported issue</li>
           </ul>
-          <p style={{ margin: 0, fontSize: '13px' }}>
-            <strong>Note:</strong> If you can't find a similar issue, please
-            report it with the details below.
-          </p>
-        </div>
+        </Flash>
 
-        <div className="error-footer">
-          <button className="error-button" onClick={onReportButtonPressed}>
-            📋 Report Issue
-          </button>
-          <button
-            className="error-button refresh-button"
-            onClick={onRefreshButtonPressed}
-          >
-            🔄 Refresh Page
-          </button>
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+          <Button leadingVisual={IssueOpenedIcon} onClick={onReportButtonPressed}>
+            Report Issue
+          </Button>
+          <Button variant="primary" leadingVisual={SyncIcon} onClick={onRefreshButtonPressed}>
+            Refresh Page
+          </Button>
         </div>
       </div>
     </div>
