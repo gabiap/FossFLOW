@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { BedrockRuntimeClient, ConverseStreamCommand } from '@aws-sdk/client-bedrock-runtime';
 
 // Load environment variables
 dotenv.config();
@@ -19,6 +20,13 @@ const STORAGE_ENABLED = process.env.ENABLE_SERVER_STORAGE === 'true';
 const STORAGE_PATH = process.env.STORAGE_PATH || '/data/diagrams';
 const ENABLE_GIT_BACKUP = process.env.ENABLE_GIT_BACKUP === 'true';
 
+// AWS Bedrock Configuration
+const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
+const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || 'us.anthropic.claude-opus-4-5-20241022-v1:0';
+
+// Initialize Bedrock client (uses AWS credentials from environment or instance profile)
+const bedrockClient = new BedrockRuntimeClient({ region: AWS_REGION });
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -30,6 +38,260 @@ app.get('/api/storage/status', (req, res) => {
     gitBackup: ENABLE_GIT_BACKUP,
     version: '1.0.0'
   });
+});
+
+// AI Chat endpoint - streaming SSE with Claude via Bedrock
+app.post('/api/ai/chat', async (req, res) => {
+  const { messages, diagramData } = req.body;
+
+  if (!messages || !Array.isArray(messages)) {
+    return res.status(400).json({ error: 'messages array is required' });
+  }
+
+  // Set up SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const sendEvent = (type, data) => {
+    res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    // Build system prompt with diagram context
+    const systemPrompt = `You are an expert diagram architect assistant integrated into FossFLOW, an isometric diagram editor. You help users create, modify, and understand architecture diagrams through natural conversation.
+
+When a user asks you to create or modify a diagram, you should respond with a JSON diagram update using the tool "update_diagram".
+
+The diagram data format is:
+{
+  "title": "string - diagram title",
+  "items": [
+    {
+      "id": "unique_string_id",
+      "type": "isoflow__<icon_type>",
+      "name": "Display Name",
+      "description": "Optional description",
+      "position": { "x": number, "y": number }
+    }
+  ],
+  "connectors": [
+    {
+      "id": "unique_connector_id",
+      "from": "source_item_id",
+      "to": "target_item_id",
+      "name": "Connection label",
+      "color": "blue|green|red|orange|purple|black|gray"
+    }
+  ],
+  "colors": [
+    { "id": "blue", "value": "#0066cc" },
+    { "id": "green", "value": "#00aa00" },
+    { "id": "red", "value": "#cc0000" },
+    { "id": "orange", "value": "#ff9900" },
+    { "id": "purple", "value": "#9900cc" }
+  ]
+}
+
+Available icon types (use as "type" field with "isoflow__" prefix):
+- person, web_app, api, microservice, database, load_balancer, cache, queue
+- server, storage, network, firewall, cloud, container, kubernetes
+- redis, postgresql, mysql, mongodb, elasticsearch
+- authentication, monitoring, notification, analytics, backup, logs
+- mobile_app, desktop_app, browser, cdn, dns, vpn, gateway
+
+Position items in a logical layout:
+- Use x: 50-1000, y: 50-600 range
+- Space items 150 units apart horizontally, 100 units vertically
+- Group related services together
+
+Current diagram state:
+${diagramData ? JSON.stringify(diagramData, null, 2) : 'Empty diagram - no items yet'}
+
+Be conversational, helpful, and explain what you're creating. When you update a diagram, briefly describe the architecture decisions you made.`;
+
+    // Convert messages to Bedrock format
+    const bedrockMessages = messages.map(msg => ({
+      role: msg.role,
+      content: [{ type: 'text', text: msg.content }]
+    }));
+
+    // Tool definition for diagram updates
+    const tools = [
+      {
+        toolSpec: {
+          name: 'update_diagram',
+          description: 'Update the diagram with new items, connectors, and layout. Call this whenever the user asks to create or modify the diagram.',
+          inputSchema: {
+            json: {
+              type: 'object',
+              properties: {
+                title: { type: 'string', description: 'The diagram title' },
+                items: {
+                  type: 'array',
+                  description: 'Array of diagram items (nodes)',
+                  items: {
+                    type: 'object',
+                    required: ['id', 'type', 'name', 'position'],
+                    properties: {
+                      id: { type: 'string' },
+                      type: { type: 'string' },
+                      name: { type: 'string' },
+                      description: { type: 'string' },
+                      position: {
+                        type: 'object',
+                        properties: {
+                          x: { type: 'number' },
+                          y: { type: 'number' }
+                        },
+                        required: ['x', 'y']
+                      }
+                    }
+                  }
+                },
+                connectors: {
+                  type: 'array',
+                  description: 'Array of connections between items',
+                  items: {
+                    type: 'object',
+                    required: ['id', 'from', 'to'],
+                    properties: {
+                      id: { type: 'string' },
+                      from: { type: 'string' },
+                      to: { type: 'string' },
+                      name: { type: 'string' },
+                      color: { type: 'string' }
+                    }
+                  }
+                },
+                colors: {
+                  type: 'array',
+                  description: 'Color palette for the diagram',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string' },
+                      value: { type: 'string' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ];
+
+    let continueLoop = true;
+    let loopMessages = [...bedrockMessages];
+    let iterationCount = 0;
+    const MAX_ITERATIONS = 5;
+
+    while (continueLoop && iterationCount < MAX_ITERATIONS) {
+      iterationCount++;
+
+      const command = new ConverseStreamCommand({
+        modelId: BEDROCK_MODEL_ID,
+        system: [{ text: systemPrompt }],
+        messages: loopMessages,
+        toolConfig: { tools },
+        inferenceConfig: {
+          maxTokens: 8192,
+          temperature: 0.7
+        }
+      });
+
+      const response = await bedrockClient.send(command);
+      const stream = response.stream;
+
+      let fullText = '';
+      let toolUseId = null;
+      let toolName = null;
+      let toolInputJson = '';
+      let stopReason = null;
+      const assistantContent = [];
+
+      for await (const chunk of stream) {
+        if (chunk.contentBlockStart) {
+          const block = chunk.contentBlockStart.start;
+          if (block?.toolUse) {
+            toolUseId = block.toolUse.toolUseId;
+            toolName = block.toolUse.name;
+            toolInputJson = '';
+          }
+        } else if (chunk.contentBlockDelta) {
+          const delta = chunk.contentBlockDelta.delta;
+          if (delta?.text) {
+            fullText += delta.text;
+            sendEvent('delta', { text: delta.text });
+          } else if (delta?.toolUse?.input) {
+            toolInputJson += delta.toolUse.input;
+          }
+        } else if (chunk.contentBlockStop) {
+          if (toolUseId && toolName) {
+            let toolInput = {};
+            try {
+              toolInput = JSON.parse(toolInputJson);
+            } catch (e) {
+              console.error('Failed to parse tool input:', e);
+            }
+            assistantContent.push({
+              toolUse: { toolUseId, name: toolName, input: toolInput }
+            });
+
+            if (toolName === 'update_diagram') {
+              sendEvent('diagram_update', { diagram: toolInput });
+            }
+
+            toolUseId = null;
+            toolName = null;
+            toolInputJson = '';
+          } else if (fullText) {
+            assistantContent.push({ text: fullText });
+            fullText = '';
+          }
+        } else if (chunk.messageStop) {
+          stopReason = chunk.messageStop.stopReason;
+        }
+      }
+
+      // Add assistant message to loop
+      if (assistantContent.length > 0) {
+        loopMessages.push({ role: 'assistant', content: assistantContent });
+      }
+
+      // Handle tool use - provide results and continue
+      if (stopReason === 'tool_use') {
+        const toolResults = assistantContent
+          .filter(block => block.toolUse)
+          .map(block => ({
+            toolResult: {
+              toolUseId: block.toolUse.toolUseId,
+              content: [{ text: 'Diagram updated successfully.' }]
+            }
+          }));
+
+        if (toolResults.length > 0) {
+          loopMessages.push({ role: 'user', content: toolResults });
+        }
+      } else {
+        continueLoop = false;
+      }
+    }
+
+    sendEvent('done', { finished: true });
+    res.end();
+  } catch (error) {
+    console.error('AI chat error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'AI chat failed', details: error.message });
+    } else {
+      sendEvent('error', { message: error.message });
+      res.end();
+    }
+  }
 });
 
 // Only enable storage endpoints if storage is enabled
