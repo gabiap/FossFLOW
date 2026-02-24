@@ -24,6 +24,7 @@ const isDevelopment =
   window.location.port === '3000';
 
 const BACKEND_BASE = isDevelopment ? 'http://localhost:3001' : '';
+const BEDROCK_REQUEST_TIMEOUT_MS = 60_000;
 
 async function generateDiagramFromAI(
   prompt: string,
@@ -49,7 +50,7 @@ async function generateDiagramFromAI(
         modelId: config.modelId
       }
     }),
-    signal: AbortSignal.timeout(60000)
+    signal: AbortSignal.timeout(BEDROCK_REQUEST_TIMEOUT_MS)
   });
 
   if (!response.ok) {

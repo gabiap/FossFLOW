@@ -23,6 +23,31 @@ const STORAGE_ENABLED = process.env.ENABLE_SERVER_STORAGE === 'true';
 const STORAGE_PATH = process.env.STORAGE_PATH || '/data/diagrams';
 const ENABLE_GIT_BACKUP = process.env.ENABLE_GIT_BACKUP === 'true';
 
+// Simple in-memory rate limiter for the Bedrock endpoint (max 10 req/min per IP)
+const bedrockRateLimitMap = new Map();
+const BEDROCK_RATE_LIMIT = 10;
+const BEDROCK_RATE_WINDOW_MS = 60_000;
+
+function bedrockRateLimit(req, res, next) {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const entry = bedrockRateLimitMap.get(ip) || { count: 0, windowStart: now };
+
+  if (now - entry.windowStart > BEDROCK_RATE_WINDOW_MS) {
+    entry.count = 1;
+    entry.windowStart = now;
+  } else {
+    entry.count += 1;
+  }
+
+  bedrockRateLimitMap.set(ip, entry);
+
+  if (entry.count > BEDROCK_RATE_LIMIT) {
+    return res.status(429).json({ error: 'Too many requests. Please wait before trying again.' });
+  }
+  next();
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -243,7 +268,7 @@ if (STORAGE_ENABLED) {
 // ─── Amazon Bedrock / Claude AI Endpoint ────────────────────────────────────
 // Accepts caller-supplied credentials so the server doesn't need its own keys.
 // Credentials are validated and forwarded to AWS; they are never persisted.
-app.post('/api/bedrock/generate', async (req, res) => {
+app.post('/api/bedrock/generate', bedrockRateLimit, async (req, res) => {
   const { prompt, currentDiagram, credentials } = req.body;
 
   if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
@@ -334,10 +359,22 @@ Rules:
 
     res.json(diagramData);
   } catch (error) {
-    console.error('Bedrock error:', error);
-    const message = error?.message || 'Failed to call Amazon Bedrock';
-    // Mask credential-related details from client
-    res.status(500).json({ error: message.includes('credentials') ? 'Invalid AWS credentials' : message });
+    console.error('Bedrock error:', error?.name, error?.message);
+    // Return a generic error to avoid leaking AWS internals or credential details
+    const isCredentialError =
+      error?.name === 'CredentialsProviderError' ||
+      error?.name === 'InvalidSignatureException' ||
+      error?.name === 'UnrecognizedClientException' ||
+      error?.name === 'AccessDeniedException';
+    const isModelError =
+      error?.name === 'ResourceNotFoundException' ||
+      error?.name === 'ValidationException';
+
+    let userMessage = 'Failed to call Amazon Bedrock';
+    if (isCredentialError) userMessage = 'Invalid AWS credentials. Please check your Access Key and Secret Key.';
+    else if (isModelError) userMessage = 'Model not found or not enabled. Please verify the model ID in your AWS Bedrock console.';
+
+    res.status(500).json({ error: userMessage });
   }
 });
 

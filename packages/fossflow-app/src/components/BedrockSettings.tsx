@@ -18,6 +18,8 @@ export interface BedrockConfig {
   modelId: string;
 }
 
+const AWS_ACCESS_KEY_PATTERN = /^[A-Z0-9]{20}$/;
+
 const BEDROCK_REGIONS = [
   'us-east-1',
   'us-west-2',
@@ -71,7 +73,7 @@ export const BedrockSettings: React.FC<Props> = ({ onClose }) => {
 
     if (!config.accessKeyId.trim()) {
       newErrors.accessKeyId = 'AWS Access Key ID is required';
-    } else if (!/^[A-Z0-9]{20}$/.test(config.accessKeyId.trim())) {
+    } else if (!AWS_ACCESS_KEY_PATTERN.test(config.accessKeyId.trim())) {
       newErrors.accessKeyId = 'Access Key ID must be 20 uppercase alphanumeric characters';
     }
 
