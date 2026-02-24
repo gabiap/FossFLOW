@@ -10,6 +10,7 @@ import {
 } from './diagramUtils';
 import { StorageManager } from './StorageManager';
 import { DiagramManager } from './components/DiagramManager';
+import { ChatPanel } from './components/ChatPanel';
 import { storageManager } from './services/storageService';
 import ChangeLanguage from './components/ChangeLanguage';
 import { allLocales } from 'fossflow';
@@ -791,6 +792,22 @@ function EditorPage() {
       </div>
 
       <div className="fossflow-container">
+        <ChatPanel
+          diagramData={currentModel || diagramData}
+          onDiagramUpdate={(newDiagram) => {
+            const merged = mergeDiagramData(diagramData, {
+              ...newDiagram,
+              icons: diagramData.icons,
+              colors: newDiagram.colors || diagramData.colors
+            });
+            setDiagramData(merged);
+            setCurrentModel(merged);
+            setHasUnsavedChanges(true);
+            setFossflowKey((prev) => prev + 1);
+          }}
+          isReadonly={!!isReadonlyUrl}
+        />
+        <div className="fossflow-editor">
         <Isoflow
           key={`${fossflowKey}-${i18n.language}`}
           initialData={diagramData}
@@ -807,6 +824,7 @@ function EditorPage() {
             }
           }}
         />
+        </div>
       </div>
 
       {/* Save Dialog */}
